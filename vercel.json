@@ -1,0 +1,18 @@
+{
+  "version": 2,
+  "buildCommand": "echo 'Static site - no build needed'",
+  "framework": null,
+  "public": true,
+  "env": [],
+  "headers": [
+    {
+      "source": "/index.html",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=3600, s-maxage=3600"
+        }
+      ]
+    }
+  ]
+}
