@@ -1,0 +1,280 @@
+
+<h2 class="sr-only">Golden Hour VIP arrival tracker — three upcoming guests with live countdowns, state alerts, and check-in controls for Selman Marrakech front desk</h2>
+
+<style>
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:.45} }
+.blink { animation: blink 1.15s ease-in-out infinite; }
+</style>
+
+<div style="padding:1rem 0;">
+  <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:1.5rem;">
+    <div>
+      <p style="font-size:11px;color:var(--color-text-secondary);margin:0 0 3px;letter-spacing:.07em;">Selman Marrakech · Front desk</p>
+      <h3 style="font-size:19px;margin:0;font-weight:500;color:var(--color-text-primary);">Golden hour tracker</h3>
+    </div>
+    <span id="clock" style="font-size:13px;color:var(--color-text-secondary);font-variant-numeric:tabular-nums;"></span>
+  </div>
+
+  <p id="no-arr" style="display:none;text-align:center;padding:2rem 0;color:var(--color-text-secondary);font-size:14px;">No upcoming arrivals — add a VIP below.</p>
+  <div id="cards-wrap" style="display:flex;flex-direction:column;gap:10px;"></div>
+
+  <div style="margin-top:12px;">
+    <button id="add-toggle-btn" onclick="toggleAdd()" style="font-size:13px;width:100%;">+ Add VIP arrival</button>
+  </div>
+
+  <div id="add-form" style="display:none;margin-top:10px;background:var(--color-background-secondary);border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-lg);padding:14px 16px;">
+    <p style="font-size:13px;font-weight:500;margin:0 0 12px;color:var(--color-text-primary);">New arrival</p>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
+      <div>
+        <label style="font-size:11px;color:var(--color-text-secondary);display:block;margin-bottom:4px;">Guest name</label>
+        <input id="f-name" type="text" placeholder="Mr. & Mrs. Smith" style="background:var(--color-background-primary);border:0.5px solid var(--color-border-secondary);border-radius:var(--border-radius-md);color:var(--color-text-primary);padding:7px 10px;font-size:13px;width:100%;box-sizing:border-box;">
+      </div>
+      <div>
+        <label style="font-size:11px;color:var(--color-text-secondary);display:block;margin-bottom:4px;">ETA</label>
+        <input id="f-time" type="time" style="background:var(--color-background-primary);border:0.5px solid var(--color-border-secondary);border-radius:var(--border-radius-md);color:var(--color-text-primary);padding:7px 10px;font-size:13px;width:100%;box-sizing:border-box;">
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;">
+      <div>
+        <label style="font-size:11px;color:var(--color-text-secondary);display:block;margin-bottom:4px;">Room / Suite</label>
+        <input id="f-room" type="text" placeholder="Atlas Suite 12" style="background:var(--color-background-primary);border:0.5px solid var(--color-border-secondary);border-radius:var(--border-radius-md);color:var(--color-text-primary);padding:7px 10px;font-size:13px;width:100%;box-sizing:border-box;">
+      </div>
+      <div>
+        <label style="font-size:11px;color:var(--color-text-secondary);display:block;margin-bottom:4px;">Category</label>
+        <input id="f-type" type="text" placeholder="Pool Villa" style="background:var(--color-background-primary);border:0.5px solid var(--color-border-secondary);border-radius:var(--border-radius-md);color:var(--color-text-primary);padding:7px 10px;font-size:13px;width:100%;box-sizing:border-box;">
+      </div>
+    </div>
+    <div style="display:flex;gap:8px;">
+      <button onclick="addArrival()" style="font-size:13px;flex:1;">Add to tracker</button>
+      <button onclick="toggleAdd()" style="font-size:13px;">Cancel</button>
+    </div>
+  </div>
+
+  <div id="log-section" style="display:none;margin-top:1.5rem;">
+    <p style="font-size:11px;letter-spacing:.06em;color:var(--color-text-secondary);margin:0 0 8px;">Completed check-ins</p>
+    <div id="log-list" style="display:flex;flex-direction:column;gap:6px;"></div>
+  </div>
+</div>
+
+<script>
+const arrivals = [
+  {id:1, name:"Mr. & Mrs. Al-Rashidi", room:"Atlas Suite 12", type:"Junior Suite", eta:Date.now()+8*60*1000},
+  {id:2, name:"Ms. Chen Wei", room:"Riad Pool Villa 3", type:"Pool Villa", eta:Date.now()+26*60*1000},
+  {id:3, name:"Lord & Lady Pemberton", room:"Prestige Room 07", type:"Prestige Room", eta:Date.now()+63*60*1000},
+];
+const checkedIn=[], prevSt={};
+let nextId=4, editingId=null;
+
+const ST = {
+  overdue: {bg:'var(--color-background-danger)', bo:'0.5px solid var(--color-border-danger)', stripe:'var(--color-text-danger)', tc:'var(--color-text-danger)', lbl:'Overdue', blink:true},
+  critical:{bg:'var(--color-background-danger)', bo:'0.5px solid var(--color-border-danger)', stripe:'var(--color-text-danger)', tc:'var(--color-text-danger)', lbl:'Arriving now', blink:true},
+  warning: {bg:'var(--color-background-warning)',bo:'0.5px solid var(--color-border-warning)',stripe:'var(--color-text-warning)',tc:'var(--color-text-warning)',lbl:'30-min window',blink:false},
+  normal:  {bg:'var(--color-background-primary)', bo:'0.5px solid var(--color-border-tertiary)',stripe:'var(--color-border-secondary)',tc:'var(--color-text-primary)',lbl:'Upcoming',blink:false},
+};
+
+function getState(ms){
+  if(ms<=0) return 'overdue';
+  const m=ms/60000;
+  if(m<=10) return 'critical';
+  if(m<=30) return 'warning';
+  return 'normal';
+}
+
+function fmt(ms){
+  const a=Math.abs(ms),m=Math.floor(a/60000),s=Math.floor((a%60000)/1000);
+  return (ms<0?'-':'')+String(m).padStart(2,'0')+':'+String(s).padStart(2,'0');
+}
+
+function fmtETA(ts){
+  return new Date(ts).toLocaleTimeString('fr-MA',{hour:'2-digit',minute:'2-digit'});
+}
+
+function timeVal(ts){
+  const d=new Date(ts);
+  return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');
+}
+
+function inp(id,val,ph){
+  return `<input id="${id}" type="text" value="${val}" placeholder="${ph||''}" style="background:var(--color-background-secondary);border:0.5px solid var(--color-border-secondary);border-radius:var(--border-radius-md);color:var(--color-text-primary);padding:6px 10px;font-size:13px;width:100%;box-sizing:border-box;">`;
+}
+
+function buildNormal(a,state){
+  const s=ST[state], ms=a.eta-Date.now();
+  return `
+<div style="width:4px;background:${s.stripe};flex-shrink:0;border-radius:var(--border-radius-lg) 0 0 var(--border-radius-lg);"></div>
+<div style="flex:1;padding:13px 15px;display:flex;gap:12px;align-items:center;min-width:0;">
+  <div style="flex:1;min-width:0;">
+    <p style="font-size:14px;font-weight:500;margin:0 0 2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--color-text-primary);">${a.name}</p>
+    <p style="font-size:12px;color:var(--color-text-secondary);margin:0 0 3px;">${a.room} · <span style="color:var(--color-text-secondary);">${a.type}</span></p>
+    <p style="font-size:11px;color:var(--color-text-secondary);margin:0;">ETA ${fmtETA(a.eta)}</p>
+  </div>
+  <div style="text-align:center;flex-shrink:0;min-width:72px;">
+    <p id="tmr-${a.id}" class="${s.blink?'blink':''}" style="font-size:28px;font-weight:500;font-variant-numeric:tabular-nums;margin:0;color:${s.tc};line-height:1;">${fmt(ms)}</p>
+    <p id="lbl-${a.id}" style="font-size:10px;letter-spacing:.05em;color:${s.tc};margin:3px 0 0;">${s.lbl}</p>
+  </div>
+  <div style="display:flex;flex-direction:column;gap:6px;flex-shrink:0;">
+    <button onclick="checkIn(${a.id})" style="font-size:12px;padding:6px 12px;white-space:nowrap;">Check-in</button>
+    <button onclick="startEdit(${a.id})" style="font-size:12px;padding:6px 12px;">Edit</button>
+  </div>
+</div>`;
+}
+
+function buildEdit(a){
+  const state=getState(a.eta-Date.now()), s=ST[state];
+  return `
+<div style="width:4px;background:${s.stripe};flex-shrink:0;border-radius:var(--border-radius-lg) 0 0 var(--border-radius-lg);"></div>
+<div style="flex:1;padding:13px 15px;">
+  <p style="font-size:13px;font-weight:500;margin:0 0 10px;color:var(--color-text-primary);">Edit arrival</p>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
+    <div><label style="font-size:11px;color:var(--color-text-secondary);display:block;margin-bottom:3px;">Guest name</label>${inp('e-name-'+a.id,a.name)}</div>
+    <div><label style="font-size:11px;color:var(--color-text-secondary);display:block;margin-bottom:3px;">ETA</label><input id="e-time-${a.id}" type="time" value="${timeVal(a.eta)}" style="background:var(--color-background-secondary);border:0.5px solid var(--color-border-secondary);border-radius:var(--border-radius-md);color:var(--color-text-primary);padding:6px 10px;font-size:13px;width:100%;box-sizing:border-box;"></div>
+  </div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;">
+    <div><label style="font-size:11px;color:var(--color-text-secondary);display:block;margin-bottom:3px;">Room</label>${inp('e-room-'+a.id,a.room)}</div>
+    <div><label style="font-size:11px;color:var(--color-text-secondary);display:block;margin-bottom:3px;">Category</label>${inp('e-type-'+a.id,a.type)}</div>
+  </div>
+  <div style="display:flex;gap:8px;">
+    <button onclick="saveEdit(${a.id})" style="font-size:13px;flex:1;">Save</button>
+    <button onclick="cancelEdit()" style="font-size:13px;">Cancel</button>
+  </div>
+</div>`;
+}
+
+function setCardShell(el, state){
+  const s=ST[state];
+  el.style.background=s.bg;
+  el.style.border=s.bo;
+}
+
+function initCards(){
+  const wrap=document.getElementById('cards-wrap');
+  wrap.innerHTML='';
+  arrivals.sort((a,b)=>a.eta-b.eta).forEach(a=>{
+    const state=getState(a.eta-Date.now());
+    prevSt[a.id]=state;
+    const el=document.createElement('div');
+    el.id='card-'+a.id;
+    el.style.cssText=`background:${ST[state].bg};border:${ST[state].bo};border-radius:var(--border-radius-lg);overflow:hidden;display:flex;`;
+    el.innerHTML=buildNormal(a,state);
+    wrap.appendChild(el);
+  });
+  document.getElementById('no-arr').style.display=arrivals.length?'none':'block';
+}
+
+function tick(){
+  const clockEl=document.getElementById('clock');
+  if(clockEl) clockEl.textContent=new Date().toLocaleTimeString('fr-MA',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  arrivals.forEach(a=>{
+    if(editingId===a.id) return;
+    const ms=a.eta-Date.now(), state=getState(ms);
+    const el=document.getElementById('card-'+a.id);
+    if(!el) return;
+    if(prevSt[a.id]!==state){
+      prevSt[a.id]=state;
+      setCardShell(el,state);
+      el.innerHTML=buildNormal(a,state);
+    } else {
+      const t=document.getElementById('tmr-'+a.id);
+      if(t) t.textContent=fmt(ms);
+    }
+  });
+}
+
+function checkIn(id){
+  const idx=arrivals.findIndex(a=>a.id===id);
+  if(idx<0) return;
+  const a=arrivals.splice(idx,1)[0];
+  if(editingId===id) editingId=null;
+  delete prevSt[id];
+  const el=document.getElementById('card-'+id);
+  if(el) el.remove();
+  const now=new Date();
+  checkedIn.unshift({
+    name:a.name, room:a.room, type:a.type,
+    time:now.toLocaleTimeString('fr-MA',{hour:'2-digit',minute:'2-digit',second:'2-digit'}),
+    date:now.toLocaleDateString('fr-MA',{day:'2-digit',month:'short'})
+  });
+  document.getElementById('no-arr').style.display=arrivals.length?'none':'block';
+  const sec=document.getElementById('log-section');
+  sec.style.display='block';
+  document.getElementById('log-list').innerHTML=checkedIn.map(e=>`
+<div style="background:var(--color-background-success);border:0.5px solid var(--color-border-success);border-radius:var(--border-radius-md);padding:10px 14px;display:flex;justify-content:space-between;align-items:center;">
+  <div>
+    <p style="font-size:13px;font-weight:500;margin:0;color:var(--color-text-primary);">${e.name}</p>
+    <p style="font-size:12px;color:var(--color-text-secondary);margin:2px 0 0;">${e.room} · ${e.type}</p>
+  </div>
+  <div style="text-align:right;flex-shrink:0;">
+    <p style="font-size:12px;color:var(--color-text-success);margin:0;font-weight:500;">Checked in</p>
+    <p style="font-size:11px;color:var(--color-text-secondary);margin:1px 0 0;font-variant-numeric:tabular-nums;">${e.date} · ${e.time}</p>
+  </div>
+</div>`).join('');
+}
+
+function startEdit(id){
+  editingId=id;
+  const a=arrivals.find(a=>a.id===id);
+  const el=document.getElementById('card-'+id);
+  if(!a||!el) return;
+  const state=getState(a.eta-Date.now());
+  setCardShell(el,state);
+  el.innerHTML=buildEdit(a);
+}
+
+function cancelEdit(){
+  if(editingId===null) return;
+  const a=arrivals.find(a=>a.id===editingId);
+  editingId=null;
+  if(!a) return;
+  const state=getState(a.eta-Date.now());
+  const el=document.getElementById('card-'+a.id);
+  if(el){ setCardShell(el,state); el.innerHTML=buildNormal(a,state); }
+}
+
+function saveEdit(id){
+  const a=arrivals.find(a=>a.id===id);
+  if(!a) return;
+  const n=document.getElementById('e-name-'+id);
+  const t=document.getElementById('e-time-'+id);
+  const r=document.getElementById('e-room-'+id);
+  const tp=document.getElementById('e-type-'+id);
+  if(n&&n.value) a.name=n.value;
+  if(r&&r.value) a.room=r.value;
+  if(tp&&tp.value) a.type=tp.value;
+  if(t&&t.value){
+    const [h,m]=t.value.split(':').map(Number);
+    const d=new Date(); d.setHours(h,m,0,0);
+    if(d.getTime()<Date.now()) d.setDate(d.getDate()+1);
+    a.eta=d.getTime();
+  }
+  editingId=null;
+  const state=getState(a.eta-Date.now());
+  prevSt[id]=state;
+  const el=document.getElementById('card-'+id);
+  if(el){ setCardShell(el,state); el.innerHTML=buildNormal(a,state); }
+}
+
+function toggleAdd(){
+  const form=document.getElementById('add-form');
+  const btn=document.getElementById('add-toggle-btn');
+  const show=form.style.display==='none';
+  form.style.display=show?'block':'none';
+  btn.textContent=show?'Cancel':'+ Add VIP arrival';
+}
+
+function addArrival(){
+  const name=document.getElementById('f-name').value.trim();
+  const tv=document.getElementById('f-time').value;
+  if(!name||!tv) return;
+  const [h,m]=tv.split(':').map(Number);
+  const d=new Date(); d.setHours(h,m,0,0);
+  if(d.getTime()<Date.now()) d.setDate(d.getDate()+1);
+  arrivals.push({id:nextId++, name, room:document.getElementById('f-room').value.trim()||'TBD', type:document.getElementById('f-type').value.trim()||'', eta:d.getTime()});
+  ['f-name','f-time','f-room','f-type'].forEach(x=>{ document.getElementById(x).value=''; });
+  toggleAdd();
+  initCards();
+}
+
+initCards();
+setInterval(tick, 1000);
+tick();
+</script>
