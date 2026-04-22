@@ -73,7 +73,7 @@ body{
 <div class="tracker">
   <div class="tracker-header">
     <div>
-      <p class="tracker-meta">Selman Marrakech · Front desk</p>
+      <p class="tracker-meta">Selman Marrakech - Front desk</p>
       <h3 class="tracker-title">Golden hour tracker</h3>
     </div>
     <span id="clock" class="clock"></span>
@@ -263,13 +263,13 @@ function checkIn(id){
   const sec=document.getElementById('log-section');
   sec.style.display='block';
   document.getElementById('log-list').innerHTML=checkedIn.map(e=>`
-<div class="log-item">
+<div style="background:var(--color-background-success);border:0.5px solid var(--color-border-success);border-radius:var(--border-radius-md);padding:10px 14px;display:flex;justify-content:space-between;align-items:center;">
   <div>
-    <p style="font-size:13px;font-weight:600;margin:0;color:var(--color-text-primary);">${e.name}</p>
+    <p style="font-size:13px;font-weight:500;margin:0;color:var(--color-text-primary);">${e.name}</p>
     <p style="font-size:12px;color:var(--color-text-secondary);margin:2px 0 0;">${e.room} · ${e.type}</p>
   </div>
   <div style="text-align:right;flex-shrink:0;">
-    <p style="font-size:12px;color:var(--color-text-success);margin:0;font-weight:600;">Checked in</p>
+    <p style="font-size:12px;color:var(--color-text-success);margin:0;font-weight:500;">Checked in</p>
     <p style="font-size:11px;color:var(--color-text-secondary);margin:1px 0 0;font-variant-numeric:tabular-nums;">${e.date} · ${e.time}</p>
   </div>
 </div>`).join('');
